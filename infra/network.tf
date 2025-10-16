@@ -68,3 +68,22 @@ resource "aws_db_subnet_group" "db" {
   subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
   tags       = { Name = "db-subnet-group" }
 }
+
+# App security group for Lambdas
+resource "aws_security_group" "app" {
+  name        = "constructionos-app-sg"
+  description = "App functions in VPC"
+  vpc_id      = aws_vpc.main.id
+  egress { from_port = 0 to_port = 0 protocol = "-1" cidr_blocks = ["0.0.0.0/0"] }
+  tags = { Name = "app-sg" }
+}
+
+# Allow Postgres from app SG to DB SG
+resource "aws_security_group_rule" "db_ingress_pg" {
+  type                     = "ingress"
+  security_group_id        = aws_security_group.db.id
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.app.id
+}

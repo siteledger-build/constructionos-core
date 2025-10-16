@@ -42,9 +42,24 @@ resource "aws_lambda_function" "hello" {
   filename         = data.archive_file.hello_zip.output_path
   source_code_hash = data.archive_file.hello_zip.output_base64sha256
 
-  # Faster cold starts in UK
   architectures = ["arm64"]
   timeout       = 5
+
+  # NEW: run Lambda inside our VPC
+  vpc_config {
+    subnet_ids         = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_group_ids = [aws_security_group.app.id]
+  }
+
+  # NEW: env vars your handler can read
+  environment {
+    variables = {
+      DB_PROXY_ENDPOINT = aws_db_proxy.pg.endpoint
+      DB_NAME           = aws_rds_cluster.db.database_name
+      DB_SECRET_ARN     = aws_secretsmanager_secret.db_master.arn
+      DB_PORT           = "5432"
+    }
+  }
 }
 
 # --- HTTP API Gateway (v2)
