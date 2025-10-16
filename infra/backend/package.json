@@ -1,0 +1,12 @@
+{
+  "name": "constructionos-backend",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "lint": "echo \"(add ESLint later)\"",
+    "build": "echo \"(no build step for now)\"",
+    "test": "node -e \"console.log('ok')\""
+  },
+  "dependencies": {}
+}
