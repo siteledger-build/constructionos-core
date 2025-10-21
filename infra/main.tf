@@ -159,3 +159,52 @@ resource "aws_lambda_permission" "allow_apigw_upload" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
 }
+
+# --- Zip the OCR lambda
+data "archive_file" "ocr_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../backend/ocr"
+  output_path = "${path.module}/build/ocr.zip"
+}
+
+# --- OCR Lambda
+resource "aws_lambda_function" "ocr" {
+  function_name = "constructionos-ocr-${random_id.suffix.hex}"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "index.handler"
+  runtime       = "nodejs20.x"
+
+  filename         = data.archive_file.ocr_zip.output_path
+  source_code_hash = data.archive_file.ocr_zip.output_base64sha256
+
+  architectures = ["arm64"]
+  timeout       = 20
+
+  environment {
+    variables = {
+      KMS_KEY = aws_kms_key.files.arn
+    }
+  }
+}
+
+# --- Allow S3 to invoke the OCR lambda
+resource "aws_lambda_permission" "allow_s3_invoke_ocr" {
+  statement_id  = "AllowS3InvokeOCR"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ocr.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.receipts.arn
+}
+
+# --- Wire S3 -> Lambda on object created (uploads/*)
+resource "aws_s3_bucket_notification" "receipts_events" {
+  bucket = aws_s3_bucket.receipts.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.ocr.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "uploads/"
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3_invoke_ocr]
+}
