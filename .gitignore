@@ -146,3 +146,7 @@ vite.config.ts.timestamp-*
 # Node
 node_modules/
 backend/**/dist/
+
+backend/**/node_modules/
+backend/**/dist/
+infra/build/

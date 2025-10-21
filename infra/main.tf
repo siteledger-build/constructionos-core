@@ -108,3 +108,54 @@ output "api_base_url" {
 output "health_url" {
   value = "${aws_apigatewayv2_api.http_api.api_endpoint}/health"
 }
+
+# --- Zip the upload lambda
+data "archive_file" "upload_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/../backend/upload"
+  output_path = "${path.module}/build/upload.zip"
+}
+
+# --- Lambda for presigning S3 uploads
+resource "aws_lambda_function" "upload_presign" {
+  function_name = "constructionos-upload-presign-${random_id.suffix.hex}"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "index.handler"
+  runtime       = "nodejs20.x"
+
+  filename         = data.archive_file.upload_zip.output_path
+  source_code_hash = data.archive_file.upload_zip.output_base64sha256
+
+  architectures = ["arm64"]
+  timeout       = 5
+
+  # Env so function knows bucket & KMS key
+  environment {
+    variables = {
+      BUCKET  = aws_s3_bucket.receipts.bucket
+      KMS_KEY = aws_kms_key.files.arn
+    }
+  }
+}
+
+# --- API Integration and route: POST /uploads/receipt-url
+resource "aws_apigatewayv2_integration" "upload_integration" {
+  api_id                 = aws_apigatewayv2_api.http_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.upload_presign.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "upload_route" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "POST /uploads/receipt-url"
+  target    = "integrations/${aws_apigatewayv2_integration.upload_integration.id}"
+}
+
+resource "aws_lambda_permission" "allow_apigw_upload" {
+  statement_id  = "AllowAPIGatewayInvokeUpload"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.upload_presign.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http_api.execution_arn}/*/*"
+}

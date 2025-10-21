@@ -13,3 +13,11 @@ resource "aws_kms_key" "secrets" {
   enable_key_rotation     = true
   tags                    = { Name = "kms-secrets" }
 }
+
+# KMS key for S3 receipts (separate from DB/secrets keys)
+resource "aws_kms_key" "files" {
+  description             = "KMS for ConstructionOS receipts"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+  tags                    = { Name = "kms-files" }
+}
